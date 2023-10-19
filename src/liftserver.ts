@@ -22,55 +22,13 @@ type LiftAction = {
     destination?: number,
 }
 
-class ButtonService{
-    private readonly liftRequests : LiftRequest[] = [];
-
-    getLiftRequests(): Promise<LiftRequest[]>{
-        return Promise.resolve(this.liftRequests);
-    }
-
-    addLiftRequest(liftRequest: LiftRequest): Promise<boolean>{
-        for(const lr of this.liftRequests){
-            if(lr.level === liftRequest.level && lr.direction === liftRequest.direction){
-                return Promise.resolve(false);
-            }
-        }
-        this.liftRequests.push(liftRequest);
-        return Promise.resolve(true);
-    }
-}
-
-class LiftService {
-
-    private readonly lifts: Lift[];
-
-    constructor(lifts: Lift[]) {
-        this.lifts = lifts;
-    }
-
-    getAllLifts(): Promise<Lift[]> {
-        return Promise.resolve(this.lifts);
-    }
-
-    private computeDirection(lift: Lift): string {
-        if(lift.destinations.length === 0){
-            return "IDLE";
-        }
-        const nextDestination = lift.destinations[0];
-        if(nextDestination === lift.level){
-            return lift.direction;
-        }
-        if(nextDestination > lift.level){
-            return "UP";
-        }
-        return "DOWN";
-    }
+class LiftUtilService{
 
     private isBetween(x: number, min_: number, max_: number): boolean{
         return min_ < x && x < max_;
     }
 
-    private addDestination(destinations: number[], currentLevel: number, newDestination: number){
+    addDestination(destinations: number[], currentLevel: number, newDestination: number){
         if(destinations.length === 0){
             return [newDestination];
         }
@@ -93,16 +51,72 @@ class LiftService {
             }
         }
         return destinations.concat([newDestination]);
-
     }
 
+    computeDirection(lift: Lift): string {
+        if(lift.destinations.length === 0){
+            return "IDLE";
+        }
+        const nextDestination = lift.destinations[0];
+        if(nextDestination === lift.level){
+            return lift.direction;
+        }
+        if(nextDestination > lift.level){
+            return "UP";
+        }
+        return "DOWN";
+    }
+
+    removeFromArray(lst: number[], toRemove: number): number[] {
+        const ret: number[] = [];
+        for(const e of lst){
+            if(e !== toRemove){
+                ret.push(e);
+            }
+        }
+        return ret
+    }
+
+}
+
+class InMemoryButtonService{
+    private readonly liftRequests : LiftRequest[] = [];
+
+    getLiftRequests(): Promise<LiftRequest[]>{
+        return Promise.resolve(this.liftRequests);
+    }
+
+    addLiftRequest(liftRequest: LiftRequest): Promise<boolean>{
+        for(const lr of this.liftRequests){
+            if(lr.level === liftRequest.level && lr.direction === liftRequest.direction){
+                return Promise.resolve(false);
+            }
+        }
+        this.liftRequests.push(liftRequest);
+        return Promise.resolve(true);
+    }
+}
+
+class InMemoryLiftService {
+
+    private readonly lifts: Lift[];
+    private readonly liftUtilService: LiftUtilService;
+
+    constructor(lifts: Lift[]) {
+        this.lifts = lifts;
+        this.liftUtilService = new LiftUtilService();
+    }
+
+    getAllLifts(): Promise<Lift[]> {
+        return Promise.resolve(this.lifts);
+    }
     async processAddDestination(liftId: number, level: number): Promise<boolean> {
         const lift = await this.getElevatorById(liftId);
         if(!lift){
             return Promise.resolve(false);
         }
-        lift.destinations = this.addDestination(lift.destinations, lift.level, level);
-        lift.direction = this.computeDirection(lift);
+        lift.destinations = this.liftUtilService.addDestination(lift.destinations, lift.level, level);
+        lift.direction = this.liftUtilService.computeDirection(lift);
         return Promise.resolve(true);
     }
 
@@ -111,18 +125,9 @@ class LiftService {
         if(!lift){
             return Promise.resolve(false);
         }
-        lift.destinations = this.removeFromArray(lift.destinations, level);
-        lift.direction = this.computeDirection(lift);
+        lift.destinations = this.liftUtilService.removeFromArray(lift.destinations, level);
+        lift.direction = this.liftUtilService.computeDirection(lift);
         return Promise.resolve(true);
-    }
-    private removeFromArray(lst: number[], toRemove: number): number[] {
-        const ret: number[] = [];
-        for(const e of lst){
-            if(e !== toRemove){
-                ret.push(e);
-            }
-        }
-        return ret
     }
 
     async processLiftMovement(liftId: number, level: number): Promise<boolean> {
@@ -154,7 +159,7 @@ class LiftService {
         return true;
     }
 
-    getAllListsMatching(liftFilterCriteria: LiftFilterCriteron): Promise<Lift[]> {
+    getAllLiftsMatching(liftFilterCriteria: LiftFilterCriteron): Promise<Lift[]> {
         const ret: Lift[] = [];
         for (const lift of this.lifts) {
             if (this.matches(lift, liftFilterCriteria)) {
@@ -175,14 +180,14 @@ class LiftService {
 }
 
 
-function createLiftService(): LiftService {
+function createLiftService(): InMemoryLiftService {
     const defaultLifts: Lift[] = [
         {id: 1, level: 12, direction: 'IDLE', destinations: []},
         {id: 2, level: -1, direction: 'IDLE', destinations: []},
         {id: 3, level: 5, direction: 'IDLE', destinations: []},
         {id: 4, level: 17, direction: 'IDLE', destinations: []},
     ];
-    return new LiftService(defaultLifts);
+    return new InMemoryLiftService(defaultLifts);
 }
 
 function toSmallRepresentation(lifts: Lift[]): SmallLiftRepresentation[] {
@@ -196,7 +201,7 @@ function toSmallRepresentation(lifts: Lift[]): SmallLiftRepresentation[] {
 
 const liftService = createLiftService();
 
-const buttonService = new ButtonService();
+const buttonService = new InMemoryButtonService();
 
 function send404(res: Response): void {
     res.status(404);
@@ -211,7 +216,7 @@ function send400(res: Response): void {
 app.get('/api/v1/lifts', async (req: Request, res: Response): Promise<void> => {
     const query = req.query as LiftSearchRequestParams;
     const criterion = liftSearchRequestParamsToLiftFilterCriteria(query);
-    const ret = await liftService.getAllListsMatching(criterion);
+    const ret = await liftService.getAllLiftsMatching(criterion);
     res.send({lifts: toSmallRepresentation(ret)})
 });
 
