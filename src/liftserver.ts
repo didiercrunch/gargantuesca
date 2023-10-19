@@ -25,18 +25,18 @@ type LiftAction = {
 class ButtonService{
     private readonly liftRequests : LiftRequest[] = [];
 
-    getLiftRequests(): LiftRequest[]{
-        return this.liftRequests;
+    getLiftRequests(): Promise<LiftRequest[]>{
+        return Promise.resolve(this.liftRequests);
     }
 
-    addLiftRequest(liftRequest: LiftRequest): boolean{
+    addLiftRequest(liftRequest: LiftRequest): Promise<boolean>{
         for(const lr of this.liftRequests){
             if(lr.level === liftRequest.level && lr.direction === liftRequest.direction){
-                return false;
+                return Promise.resolve(false);
             }
         }
         this.liftRequests.push(liftRequest);
-        return true;
+        return Promise.resolve(true);
     }
 }
 
@@ -48,11 +48,11 @@ class LiftService {
         this.lifts = lifts;
     }
 
-    getAllLifts(): Lift[] {
-        return this.lifts;
+    getAllLifts(): Promise<Lift[]> {
+        return Promise.resolve(this.lifts);
     }
 
-    private computeDirection(lift: Lift): string{
+    private computeDirection(lift: Lift): string {
         if(lift.destinations.length === 0){
             return "IDLE";
         }
@@ -96,26 +96,26 @@ class LiftService {
 
     }
 
-    processAddDestination(liftId: number, level: number): boolean {
-        const lift = this.getElevatorById(liftId);
+    async processAddDestination(liftId: number, level: number): Promise<boolean> {
+        const lift = await this.getElevatorById(liftId);
         if(!lift){
-            return false;
+            return Promise.resolve(false);
         }
         lift.destinations = this.addDestination(lift.destinations, lift.level, level);
         lift.direction = this.computeDirection(lift);
-        return true;
+        return Promise.resolve(true);
     }
 
-    processDoorOpen(liftId: number, level: number): boolean {
-        const lift = this.getElevatorById(liftId);
+    async processDoorOpen(liftId: number, level: number): Promise<boolean> {
+        const lift = await this.getElevatorById(liftId);
         if(!lift){
-            return false;
+            return Promise.resolve(false);
         }
         lift.destinations = this.removeFromArray(lift.destinations, level);
         lift.direction = this.computeDirection(lift);
-        return true;
+        return Promise.resolve(true);
     }
-    removeFromArray(lst: number[], toRemove: number): number[] {
+    private removeFromArray(lst: number[], toRemove: number): number[] {
         const ret: number[] = [];
         for(const e of lst){
             if(e !== toRemove){
@@ -125,13 +125,13 @@ class LiftService {
         return ret
     }
 
-    processLiftMovement(liftId: number, level: number): boolean {
-        const lift = this.getElevatorById(liftId);
+    async processLiftMovement(liftId: number, level: number): Promise<boolean> {
+        const lift = await this.getElevatorById(liftId);
         if(!lift){
-            return false;
+            return Promise.resolve(false);
         }
         lift.level = level;
-        return true;
+        return Promise.resolve(true);
     }
 
     private matches(lift: Lift, liftFilterCriteria: LiftFilterCriteron) {
@@ -154,23 +154,23 @@ class LiftService {
         return true;
     }
 
-    getAllListsMatching(liftFilterCriteria: LiftFilterCriteron): Lift[] {
+    getAllListsMatching(liftFilterCriteria: LiftFilterCriteron): Promise<Lift[]> {
         const ret: Lift[] = [];
         for (const lift of this.lifts) {
             if (this.matches(lift, liftFilterCriteria)) {
                 ret.push(lift);
             }
         }
-        return ret;
+        return Promise.resolve(ret);
     }
 
-    getElevatorById(id: number): Lift | null {
+    getElevatorById(id: number): Promise<Lift | null> {
         for (const lift of this.lifts) {
             if (lift.id === id) {
-                return lift;
+                return Promise.resolve(lift);
             }
         }
-        return null;
+        return Promise.resolve(null);
     }
 }
 
@@ -208,25 +208,25 @@ function send400(res: Response): void {
     res.send({});
 }
 
-app.get('/api/v1/lifts', (req: Request, res: Response): void => {
+app.get('/api/v1/lifts', async (req: Request, res: Response): Promise<void> => {
     const query = req.query as LiftSearchRequestParams;
     const criterion = liftSearchRequestParamsToLiftFilterCriteria(query);
-    const ret = liftService.getAllListsMatching(criterion);
+    const ret = await liftService.getAllListsMatching(criterion);
     res.send({lifts: toSmallRepresentation(ret)})
 });
 
-app.get('/api/v1/lifts/:id', (req: Request<{ id: string }>, res: Response): void => {
+app.get('/api/v1/lifts/:id', async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const id = req.params.id;
-    const ret = liftService.getElevatorById(parseInt(id));
+    const ret = await liftService.getElevatorById(parseInt(id));
     if (ret == null) {
         return send404(res);
     }
     res.send(ret)
 });
 
-app.post('/api/v1/lifts/:id', (req: Request<{ id: string }>, res: Response): void => {
+app.post('/api/v1/lifts/:id', async (req: Request<{ id: string }>, res: Response): Promise<void> => {
     const id = parseInt(req.params.id);
-    const ret = liftService.getElevatorById(id);
+    const ret = await liftService.getElevatorById(id);
     if (ret == null) {
         return send404(res);
     }
@@ -235,24 +235,24 @@ app.post('/api/v1/lifts/:id', (req: Request<{ id: string }>, res: Response): voi
         return send400(res)
     }
     if(action.type === 'lift-move'){
-        liftService.processLiftMovement(id, action.level!);
+        await liftService.processLiftMovement(id, action.level!);
     }
     if(action.type === 'door-open'){
-        liftService.processDoorOpen(id, action.level!);
+        await liftService.processDoorOpen(id, action.level!);
     }
     if(action.type === 'add-destination'){
-        liftService.processAddDestination(id, action.destination!);
+        await liftService.processAddDestination(id, action.destination!);
     }
 
     res.send(ret)
 });
 
-app.get('/api/v1/lift-requests',  (req: Request, res: Response): void => {
-    res.send(buttonService.getLiftRequests());
+app.get('/api/v1/lift-requests',  async (_req: Request, res: Response): Promise<void> => {
+    res.send(await buttonService.getLiftRequests());
 });
 
-app.post('/api/v1/lift-requests',  (req: Request, res: Response): void => {
-    const changed = buttonService.addLiftRequest(req.body as LiftRequest);
+app.post('/api/v1/lift-requests',  async (req: Request, res: Response): Promise<void> => {
+    const changed = await buttonService.addLiftRequest(req.body as LiftRequest);
     res.send({changed: changed});
 });
 
