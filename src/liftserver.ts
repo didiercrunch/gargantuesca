@@ -199,6 +199,44 @@ function toSmallRepresentation(lifts: Lift[]): SmallLiftRepresentation[] {
 
 }
 
+function liftSearchRequestParamsToLiftFilterCriteria(query: LiftSearchRequestParams): LiftFilterCriteron {
+    const ret: LiftFilterCriteron = {};
+    if (query.direction !== undefined) {
+        ret.direction = query.direction;
+    }
+    if (query.floor !== undefined) {
+        ret.floor = parseInt(query.floor);
+    }
+    if (query.max_floor !== undefined) {
+        ret.max_floor = parseInt(query.max_floor);
+    }
+    if (query.min_floor !== undefined) {
+        ret.min_floor = parseInt(query.min_floor);
+    }
+    return ret;
+}
+
+function isLevel(x: any): boolean{
+    const allLevels = [
+        -2, -1, 1, 2, 3, 4, 5,
+        6, 7, 8, 9, 10, 11, 12,
+        13, 14, 15, 16, 17, 18];
+    return allLevels.includes(x);
+}
+
+function isValidAction(action?: LiftAction): boolean {
+    if(!action){
+        return false;
+    }
+    if(action.type === "lift-move" || action.type === "door-open" ){
+        return isLevel(action.level);
+    }
+    if(action.type === "add-destination" ){
+        return isLevel(action.destination);
+    }
+    return false;
+}
+
 const liftService = createLiftService();
 
 const buttonService = new InMemoryButtonService();
@@ -264,41 +302,3 @@ app.post('/api/v1/lift-requests',  async (req: Request, res: Response): Promise<
 app.listen(port, () => {
     console.log(`Example app listening on port ${port}`)
 })
-
-function liftSearchRequestParamsToLiftFilterCriteria(query: LiftSearchRequestParams): LiftFilterCriteron {
-    const ret: LiftFilterCriteron = {};
-    if (query.direction !== undefined) {
-        ret.direction = query.direction;
-    }
-    if (query.floor !== undefined) {
-        ret.floor = parseInt(query.floor);
-    }
-    if (query.max_floor !== undefined) {
-        ret.max_floor = parseInt(query.max_floor);
-    }
-    if (query.min_floor !== undefined) {
-        ret.min_floor = parseInt(query.min_floor);
-    }
-    return ret;
-}
-
-function isLevel(x: any): boolean{
-    const allLevels = [
-        -2, -1, 1, 2, 3, 4, 5,
-        6, 7, 8, 9, 10, 11, 12,
-        13, 14, 15, 16, 17, 18];
-    return allLevels.includes(x);
-}
-
-function isValidAction(action?: LiftAction): boolean {
-    if(!action){
-        return false;
-    }
-    if(action.type === "lift-move" || action.type === "door-open" ){
-        return isLevel(action.level);
-    }
-    if(action.type === "add-destination" ){
-        return isLevel(action.destination);
-    }
-    return false;
-}
